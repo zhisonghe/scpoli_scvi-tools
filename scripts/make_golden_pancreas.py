@@ -2,7 +2,7 @@
 
     .venv-parity/bin/python scripts/make_golden_pancreas.py [--seed 0]
 
-Expects data/pancreas.h5ad (https://figshare.com/ndownloader/files/41581626).
+Expects data/pancreas_sparse.h5ad (https://figshare.com/ndownloader/files/41581626).
 Writes data/golden/pancreas_seed{seed}/ with reference/query checkpoints, latents,
 predictions, uncertainties, embeddings, timings and label-transfer metrics.
 """
@@ -43,7 +43,7 @@ def main(seed: int):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    adata = sc.read(ROOT / "data" / "pancreas.h5ad")
+    adata = sc.read(ROOT / "data" / "pancreas_sparse.h5ad")
     source = adata[adata.obs.study.isin(REFERENCE)].copy()
     source = source[~source.obs.cell_type.str.contains("alpha")].copy()
     target = adata[adata.obs.study.isin(QUERY)].copy()

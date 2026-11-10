@@ -4,14 +4,16 @@
 
 | Phase | State |
 |---|---|
-| 0 Environments, golden outputs | Done for synthetic data (`tests/golden/synthetic`, from `scripts/make_golden_synthetic.py`). **Pancreas golden pending**: figshare blocks scripted download; put the file at `data/pancreas.h5ad` and run `scripts/make_golden_pancreas.py`. |
+| 0 Environments, golden outputs | Done: synthetic (`tests/golden/synthetic`) and pancreas tutorial, 3 seeds (`data/golden/pancreas_seed*`, from `data/pancreas_sparse.h5ad`). |
 | 1 Data layer | Done (`scpolivi/data`). |
 | 2 Module, 6 recon losses | Done. Forward-equivalent to scArches (≤1e-5) for nb, zinb, poisson, mse, encoder/decoder-only injection, BN, 1–3 hidden layers, 1–2 condition keys. |
 | 3 Training (splitter, plan, early stopping) | Done. |
 | 4 Prototypes | Done. Loss and update functions match scArches' trainer exactly. |
 | 5 Query mapping, shot_surgery | Done (shot_surgery generalized to several condition keys). |
 | 6 scArches checkpoint import | Done (`SCPOLI.from_scarches`). Latents match scArches to 1e-4 for reference and query checkpoints. |
-| 7 Benchmark | Synthetic only: at 2.4k cells, reference kNN accuracy 0.962 (scArches 0.935) and query label transfer 0.798 (scArches 0.787), seed 0. Real-data benchmark pending. |
+| 7 Benchmark | Synthetic: at 2.4k cells, reference kNN accuracy 0.962 (scArches 0.935), query label transfer 0.798 (scArches 0.787). Pancreas tutorial, 3 seeds (`scripts/run_pancreas_scpolivi.py`, `scripts/eval_pancreas.py`): query accuracy 0.972–0.977 (scArches 0.974–0.978); kNN cell-type accuracy, cell-type ASW, study mixing and within-study neighbour overlap all within scArches' seed range. ATAC and a large atlas still pending. |
+| 9 Projection | `get_latent`/`classify` on new AnnData work as in scArches (cell-type columns optional, unknown conditions rejected with a clear error); in addition, gene order is checked. |
+| 10 Graph Laplacian loss (scANCVI) | Done: `set_graph`, `train(graph_weight=..., graph_sampling=...)`, `fine_tune`, `scpolivi.graph.construct_sample_graphs`. In-batch estimator matches scANCVI's loss exactly; a neighbour-sampling estimator targets the same objective. Pancreas (seed 0 only): within-study neighbour overlap 0.238 → 0.245–0.249, study mixing 0.47 → 0.42–0.45, label transfer unchanged at weight 10, lower at 100. |
 | 8 Docs, release | Not started. |
 
 Environments: `.venv` (runtime, no scArches) and `.venv-parity` (adds scArches, `pandas<3`, because

@@ -142,3 +142,24 @@ def test_transform_batch_normalized_expression(gadata):
     m = fit(gadata.copy())
     expr = m.get_normalized_expression(gadata, transform_batch=m.conditions_combined_[0])
     assert expr.shape == gadata.shape
+
+
+def test_projection_like_scarches(gadata):
+    """Projection inputs accepted/rejected as in scArches (plus a gene-order check)."""
+    ref, qry = split(gadata)
+    m = fit(ref, n_epochs=4)
+    known = gadata[gadata.obs.study == "s1"].copy()
+    bare = known.copy()
+    bare.obs = bare.obs[["study", "tech"]].copy()
+    np.testing.assert_allclose(m.get_latent(bare, mean=True), m.get_latent(known.copy(), mean=True))
+    assert len(m.classify(bare, use_mean=True)["ct_fine"]["preds"]) == bare.n_obs
+    with pytest.raises(ValueError, match="unknown to the model"):
+        m.get_latent(qry.copy())
+    with pytest.raises(ValueError, match="different order"):
+        m.get_latent(known[:, known.var_names[::-1]].copy())
+    q = qry.copy()
+    q.obs = q.obs[["study", "tech"]].copy()  # query without any cell-type column
+    qm = SCPOLI.load_query_data(q, m)
+    qm.train(n_epochs=2, pretraining_epochs=1, **FAST)
+    z = qm.get_latent(gadata.copy(), mean=True)  # joint projection of reference + query
+    assert z.shape == (gadata.n_obs, 8) and np.isfinite(z).all()

@@ -325,6 +325,10 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         n_clusters: int | None = None,
         unlabeled_weight: float = 0.0,
         p_prototype_loss: float = 2.0,
+        graph_weight: float = 0.0,
+        graph_sampling: Literal["batch", "neighbors"] = "neighbors",
+        graph_start_epoch: int | None = None,
+        graph_use_mean: bool = False,
         seed: int | None = None,
         n_workers: int | None = None,
         accelerator: str = "auto",
@@ -363,6 +367,19 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
             Initialization of unlabeled prototypes.
         unlabeled_weight, p_prototype_loss
             Unlabeled prototype loss weight and distance norm.
+        graph_weight
+            Weight of the graph Laplacian loss (scANCVI) on the graph attached with
+            :meth:`set_graph`; 0 disables it.
+        graph_sampling
+            ``"neighbors"``: each training cell brings one sampled graph neighbour into its
+            minibatch (every cell gets a graph term at every step); ``"batch"``: only edges
+            between cells that share a random minibatch (scANCVI; few edges per step unless
+            minibatches are large). Validation always uses ``"batch"``.
+        graph_start_epoch
+            First epoch with the graph loss (default: with the prototype losses, after
+            ``pretraining_epochs``).
+        graph_use_mean
+            Use the latent mean instead of a sample in the graph loss.
         seed
             If given, sets ``scvi.settings.seed`` (scArches reseeds with 2020 by default).
         plan_kwargs, datasplitter_kwargs, trainer_kwargs
@@ -370,6 +387,13 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         """
         if seed is not None:
             settings.seed = seed
+        graph = self.cell_graph if graph_weight and graph_weight > 0 else None
+        if graph_weight and graph_weight > 0 and graph is None:
+            raise ValueError("graph_weight > 0 needs a graph: call `model.set_graph(...)` first.")
+        if graph_start_epoch is None:
+            graph_start_epoch = (
+                pretraining_epochs if pretraining_epochs is not None else int(np.floor(n_epochs * 0.9))
+            )
         if self.cell_type_keys_ is None or self.module.n_cell_types == 0:
             if prototype_training and self.cell_type_keys_ is None:
                 logger.info("No cell type keys: training without prototypes.")
@@ -398,6 +422,10 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
             "n_epochs_kl_warmup": alpha_epoch_anneal,
             "n_steps_kl_warmup": alpha_iter_anneal if alpha_epoch_anneal is None else None,
             "max_kl_weight": alpha_kl,
+            "graph": graph,
+            "graph_weight": graph_weight,
+            "graph_start_epoch": graph_start_epoch,
+            "graph_use_mean": graph_use_mean,
         }
         plan.update(plan_kwargs or {})
         training_plan = self._training_plan_cls(self.module, **plan)
@@ -407,6 +435,8 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
             "use_stratified_sampling": use_stratified_sampling,
             "n_samples": n_samples,
             "batch_size": batch_size,
+            "graph": graph,
+            "graph_sampling": graph_sampling,
         }
         if n_workers is not None:
             ds_kwargs["num_workers"] = n_workers
@@ -438,9 +468,99 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
             early_stopping=False,
             **trainer_kwargs,
         )
+        self.module.train()  # Lightning keeps the eval mode left by a previous run
         out = runner()
         self.module.eval()
         return out
+
+    def fine_tune(
+        self,
+        n_epochs: int = 20,
+        graph_weight: float = 1.0,
+        eta: float = 1.0,
+        lr: float = 1e-4,
+        reinitialize_prototypes: bool = False,
+        **train_kwargs,
+    ):
+        """Continue training a trained model with the graph Laplacian loss.
+
+        Runs :meth:`train` without pretraining phase and without KL warm-up, keeping the
+        current prototypes (labeled prototypes are recomputed every epoch as usual), so the
+        model starts from its trained state with the loss ``ELBO + eta * prototype + graph``.
+
+        Parameters
+        ----------
+        n_epochs
+            Number of fine-tuning epochs.
+        graph_weight
+            Weight of the graph Laplacian loss (set the graph with :meth:`set_graph`).
+        eta
+            Prototype loss weight (use the value of the original training).
+        lr
+            Learning rate (lower than for training from scratch).
+        reinitialize_prototypes
+            Re-initialize prototypes (re-clustering for unlabeled prototypes) instead of
+            continuing from the trained ones.
+        train_kwargs
+            Other :meth:`train` arguments (e.g. ``graph_sampling``, ``use_early_stopping``).
+        """
+        if not self.is_trained_:
+            logger.warning("fine_tune() is meant for trained models; consider train().")
+        plan_kwargs = dict(train_kwargs.pop("plan_kwargs", None) or {})
+        plan_kwargs.setdefault("keep_prototypes", not reinitialize_prototypes)
+        train_kwargs.setdefault("alpha_epoch_anneal", None)
+        train_kwargs.setdefault("alpha_iter_anneal", None)
+        return self.train(
+            n_epochs=n_epochs,
+            pretraining_epochs=0,
+            graph_weight=graph_weight,
+            graph_start_epoch=0,
+            eta=eta,
+            lr=lr,
+            plan_kwargs=plan_kwargs,
+            **train_kwargs,
+        )
+
+    # ------------------------------------------------------------------ graph
+    @property
+    def cell_graph(self):
+        """The :class:`~scpolivi.graph.CellGraph` attached with :meth:`set_graph` (not saved)."""
+        return getattr(self, "_graph", None)
+
+    def set_graph(
+        self,
+        graph=None,
+        graph_key: str | None = None,
+    ) -> None:
+        """Attach a within-sample cell graph for the graph Laplacian loss (scANCVI).
+
+        Parameters
+        ----------
+        graph
+            ``{sample: adjacency}`` (one square matrix per value of ``adata.obs[graph_key]``,
+            rows in adata order; see :func:`scpolivi.graph.construct_sample_graphs`), an
+            ``(n_obs, n_obs)`` matrix, or an ``adata.obsp`` key. ``None`` removes the graph.
+        graph_key
+            ``adata.obs`` column of the samples. Required for dict input; for a full matrix,
+            edges across samples are dropped and the loss is normalized per sample.
+
+        Notes
+        -----
+        The graph refers to the rows of the model's AnnData and is not saved with the model;
+        attach it again after loading. For a query model (:meth:`load_query_data`), attach a
+        graph of the query cells.
+        """
+        if graph is None:
+            self._graph = None
+            return
+        from ..graph import build_cell_graph
+
+        self._graph = build_cell_graph(self.adata, graph, graph_key)
+        logger.info(
+            "Graph with %d edges over %d groups attached.",
+            self._graph.n_edges,
+            len(self._graph.group_names),
+        )
 
     # ------------------------------------------------------------------ inference
     def _validate_anndata(self, adata: AnnData | None = None, copy_if_view: bool = True):
@@ -450,8 +570,42 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
                 if not copy_if_view:
                     raise ValueError("Please run `adata = adata.copy()`.")
                 adata._init_as_actual(adata.copy())
+            self._check_projection_input(adata)
             write_helper_columns(adata, self.condition_keys_, None, keep_existing_labeled=True)
         return super()._validate_anndata(adata, copy_if_view=copy_if_view)
+
+    def _check_projection_input(self, adata: AnnData) -> None:
+        """Checks for cells projected with a trained model (``get_latent``, ``classify``...).
+
+        As in scArches, cell-type columns are optional (missing ones are treated as unlabeled)
+        and every condition must be known to the model. Unlike scArches, genes are matched by
+        name: a different gene order would otherwise silently give wrong latents.
+        """
+        if adata.n_vars == self.summary_stats.n_vars and self.adata is not None:
+            ref_vars = self.adata.var_names
+            if not adata.var_names.equals(ref_vars):
+                if set(adata.var_names) == set(ref_vars):
+                    raise ValueError(
+                        "Genes are in a different order than in the model. Run "
+                        "`SCPOLI.prepare_query_anndata(adata, model)` first."
+                    )
+                raise ValueError(
+                    "Genes differ from the model's. Run `SCPOLI.prepare_query_anndata(adata, "
+                    "model)` to pad and reorder them."
+                )
+        missing = [k for k in self.condition_keys_ if k not in adata.obs]
+        if missing:
+            raise KeyError(f"Condition keys {missing} not found in adata.obs.")
+        for key, known in self.conditions_.items():
+            new = sorted(set(adata.obs[key].astype(str)) - set(known))
+            if new:
+                raise ValueError(
+                    f"Conditions {new} of {key!r} are unknown to the model. Map them first with "
+                    "`SCPOLI.load_query_data` (or `shot_surgery`)."
+                )
+        for key in self.cell_type_keys_ or []:
+            if key not in adata.obs:
+                adata.obs[key] = pd.Series(np.nan, index=adata.obs_names, dtype=object)
 
     @torch.inference_mode()
     def _latent(

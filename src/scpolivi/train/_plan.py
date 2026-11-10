@@ -52,6 +52,18 @@ class SCPoliTrainingPlan(TrainingPlan):
         Minibatch size of the full-data latent passes.
     embedding_weight_decay
         Weight decay of the condition embeddings (0 in scPoli).
+    graph
+        :class:`~scpolivi.graph.CellGraph` for the graph Laplacian loss (scANCVI).
+    graph_weight
+        Weight of the graph Laplacian loss (0 disables it).
+    graph_start_epoch
+        First epoch with the graph loss (default: ``pretraining_epochs``, i.e. together with
+        the prototype losses).
+    graph_use_mean
+        Use the latent mean instead of a sample in the graph loss (scANCVI samples).
+    keep_prototypes
+        At the start of the prototype phase, keep existing prototypes instead of
+        re-initializing them (used to fine-tune a trained model).
     """
 
     def __init__(
@@ -70,6 +82,11 @@ class SCPoliTrainingPlan(TrainingPlan):
         any_unlabeled_data: bool = True,
         latent_batch_size: int = 1024,
         embedding_weight_decay: float = 0.0,
+        graph=None,
+        graph_weight: float = 0.0,
+        graph_start_epoch: int | None = None,
+        graph_use_mean: bool = False,
+        keep_prototypes: bool = False,
         lr: float = 1e-3,
         eps: float = 0.01,
         weight_decay: float = 0.04,
@@ -96,6 +113,16 @@ class SCPoliTrainingPlan(TrainingPlan):
         self.any_unlabeled_data = any_unlabeled_data
         self.latent_batch_size = latent_batch_size
         self.embedding_weight_decay = embedding_weight_decay
+        self.graph = graph
+        self.graph_weight = float(graph_weight)
+        if self.graph_weight > 0 and graph is None:
+            raise ValueError("graph_weight > 0 needs a graph (see SCPOLI.set_graph).")
+        self.graph_start_epoch = (
+            self.pretraining_epochs if graph_start_epoch is None else int(graph_start_epoch)
+        )
+        self.graph_use_mean = graph_use_mean
+        self.keep_prototypes = keep_prototypes
+        self._torch_graph = None
         self.prototype_optimizer: torch.optim.Optimizer | None = None
         self._unlabeled_param: torch.nn.Parameter | None = None
         self._updated_epoch = -1
@@ -133,6 +160,10 @@ class SCPoliTrainingPlan(TrainingPlan):
     def prototypes_active(self) -> bool:
         return self.prototype_training and self.current_epoch >= self.pretraining_epochs
 
+    @property
+    def graph_active(self) -> bool:
+        return self.graph_weight > 0 and self.current_epoch >= self.graph_start_epoch
+
     def _set_loss_kwargs(self):
         self.loss_kwargs.update(
             {
@@ -142,6 +173,20 @@ class SCPoliTrainingPlan(TrainingPlan):
                 "p_prototype_loss": self.p_prototype_loss,
             }
         )
+        if self.graph is not None:
+            if self._torch_graph is None:
+                from ..graph import TorchGraph
+
+                self._torch_graph = TorchGraph(self.graph, self.device)
+            elif self._torch_graph.device != self.device:
+                self._torch_graph.to(self.device)
+            self.loss_kwargs.update(
+                {
+                    "graph": self._torch_graph,
+                    "graph_weight": self.graph_weight if self.graph_active else 0.0,
+                    "graph_use_mean": self.graph_use_mean,
+                }
+            )
 
     def training_step(self, batch, batch_idx):
         self._set_loss_kwargs()
@@ -153,7 +198,10 @@ class SCPoliTrainingPlan(TrainingPlan):
 
     def on_train_epoch_start(self):
         if self.prototype_training and self.current_epoch == self.pretraining_epochs:
-            self.initialize_prototypes()
+            if self.keep_prototypes and bool(self.module.labeled_prototypes_initialized.any() or self.module.prototypes_unlabeled_mean.shape[0]):
+                self._resume_prototypes()
+            else:
+                self.initialize_prototypes()
 
     def on_validation_epoch_start(self):
         if not self.trainer.sanity_checking:
@@ -228,6 +276,17 @@ class SCPoliTrainingPlan(TrainingPlan):
                 [self._unlabeled_param], lr=self.lr, eps=self.eps, weight_decay=self.weight_decay
             )
             logger.info("Initialized %d unlabeled prototypes.", centers.shape[0])
+
+    def _resume_prototypes(self):
+        """Continue with the existing prototypes (fine-tuning a trained model)."""
+        module = self.module
+        if self.unlabeled_prototype_training and module.prototypes_unlabeled_mean.shape[0] > 0:
+            self._unlabeled_param = torch.nn.Parameter(
+                module.prototypes_unlabeled_mean.detach().clone().to(self.device)
+            )
+            self.prototype_optimizer = torch.optim.Adam(
+                [self._unlabeled_param], lr=self.lr, eps=self.eps, weight_decay=self.weight_decay
+            )
 
     def _end_of_epoch_update(self):
         if self._updated_epoch == self.current_epoch or not self.prototypes_active:

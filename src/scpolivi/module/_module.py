@@ -12,6 +12,8 @@ from scvi import REGISTRY_KEYS
 from scvi.distributions import NegativeBinomial, Poisson, ZeroInflatedNegativeBinomial
 from scvi.module.base import BaseModuleClass, EmbeddingModuleMixin, LossOutput, auto_move_data
 
+from .. import graph as G
+from .._constants import GRAPH_GROUP_KEY, GRAPH_PAIR_WEIGHT_KEY, GRAPH_ROLE_KEY
 from .._constants import SCPOLI_REGISTRY_KEYS as SK
 from ..nn._distributions import BinarizedBernoulli, SquaredError
 from ..nn._layers import RECON_LOSSES, ReconLoss, SCPoliDecoder, SCPoliEncoder
@@ -270,17 +272,50 @@ class SCPOLIVAE(EmbeddingModuleMixin, BaseModuleClass):
         unlabeled_weight: float = 0.0,
         p_prototype_loss: float = 2.0,
         use_prototypes: bool = False,
+        graph=None,
+        graph_weight: float = 0.0,
+        graph_use_mean: bool = False,
     ) -> LossOutput:
-        """ELBO plus scPoli's prototype losses (enabled with ``use_prototypes``)."""
+        """ELBO plus scPoli's prototype losses (enabled with ``use_prototypes``).
+
+        With ``graph_weight > 0`` the graph Laplacian loss (scANCVI) is added:
+
+        * if the minibatch comes from the neighbour-sampling loader (it carries
+          ``scpoli_graph_role``), anchors carry the ELBO and prototype losses and the graph
+          loss runs over the sampled (anchor, neighbour) pairs;
+        * otherwise ``graph`` (a :class:`~scpolivi.graph.TorchGraph`) is used to find the
+          edges between cells of the minibatch.
+        """
         x = tensors[REGISTRY_KEYS.X_KEY]
         px = generative_outputs["px"]
         qz = inference_outputs["qz"]
         z = inference_outputs["z"]
         reconst = -px.log_prob(x).sum(-1)
         kl_z = kl(qz, Normal(torch.zeros_like(qz.loc), torch.ones_like(qz.scale))).sum(-1)
-        cvae_loss = torch.mean(reconst + kl_weight * kl_z)
 
         zero = torch.zeros((), device=z.device)
+        graph_loss = zero
+        z_graph = inference_outputs["z_mean"] if graph_use_mean else z
+        if GRAPH_ROLE_KEY in tensors:
+            anchor = tensors[GRAPH_ROLE_KEY].reshape(-1) > 0.5
+            n_a = int(anchor.sum())
+            if graph_weight > 0:
+                graph_loss = G.pair_laplacian_loss(
+                    z_graph[:n_a],
+                    z_graph[n_a:],
+                    tensors[GRAPH_PAIR_WEIGHT_KEY][:n_a],
+                    tensors[GRAPH_GROUP_KEY][:n_a],
+                    n_groups=graph.n_groups if graph is not None else int(tensors[GRAPH_GROUP_KEY].max()) + 1,
+                )
+            # all other losses on anchors only (layout: [anchors, neighbours])
+            tensors = {k: v[:n_a] for k, v in tensors.items()}
+            reconst, kl_z, z = reconst[:n_a], kl_z[:n_a], z[:n_a]
+        elif graph_weight > 0 and graph is not None:
+            graph_loss = G.inbatch_laplacian_loss(
+                z_graph, tensors[REGISTRY_KEYS.INDICES_KEY], graph
+            )
+        cvae_loss = torch.mean(reconst + kl_weight * kl_z)
+
         labeled_loss, unlabeled_loss = zero, zero
         if use_prototypes:
             if self.prototypes_unlabeled_mean.shape[0] > 0:
@@ -290,7 +325,7 @@ class SCPOLIVAE(EmbeddingModuleMixin, BaseModuleClass):
             labeled_loss = self._labeled_loss(tensors, z, p_prototype_loss)
         unweighted_proto = labeled_loss + unlabeled_weight * unlabeled_loss
         prototype_loss = prototype_weight * unweighted_proto
-        loss = cvae_loss + prototype_loss
+        loss = cvae_loss + prototype_loss + graph_weight * graph_loss
 
         # Metric names follow scArches' logs (val_<name> there, <name>_validation here).
         return LossOutput(
@@ -302,6 +337,7 @@ class SCPOLIVAE(EmbeddingModuleMixin, BaseModuleClass):
                 "prototype_loss": prototype_loss.detach(),
                 "labeled_loss": labeled_loss.detach(),
                 "unlabeled_loss": unlabeled_loss.detach(),
+                "graph_loss": graph_loss.detach(),
                 "unweighted_loss": (
                     reconst.mean() + kl_z.mean() + unweighted_proto
                 ).detach(),
