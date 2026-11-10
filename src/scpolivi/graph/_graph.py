@@ -213,7 +213,15 @@ def construct_sample_graphs(
 
 # ---------------------------------------------------------------------- torch side
 class TorchGraph:
-    """CSR graph on a device, for minibatch edge lookups."""
+    """CSR graph on a device, for minibatch edge lookups.
+
+    Parameters
+    ----------
+    graph
+        Graph built by :func:`build_cell_graph`.
+    device
+        Torch device.
+    """
 
     def __init__(self, graph: CellGraph, device: torch.device | str = "cpu"):
         a = graph.adjacency
@@ -266,7 +274,23 @@ def grouped_laplacian(
     groups: torch.Tensor,
     n_groups: int,
 ) -> torch.Tensor:
-    """Mean over groups of ``0.5 * sum w d^2 / sum w`` (scANCVI normalization)."""
+    """Mean over groups of ``0.5 * sum w d^2 / sum w`` (scANCVI normalization).
+
+    Parameters
+    ----------
+    z_src, z_dst
+        ``(n_edges, latent_dim)`` latent codes of the two ends of each edge.
+    weights
+        ``(n_edges,)`` edge weights.
+    groups
+        ``(n_edges,)`` group (sample) code of each edge.
+    n_groups
+        Number of groups.
+
+    Returns
+    -------
+    Scalar loss; 0 (with gradient) if there are no edges.
+    """
     if weights.numel() == 0:
         return z_src.sum() * 0.0
     d2 = ((z_src - z_dst) ** 2).sum(-1)
@@ -280,7 +304,21 @@ def grouped_laplacian(
 
 
 def inbatch_laplacian_loss(z: torch.Tensor, cells: torch.Tensor, graph: TorchGraph) -> torch.Tensor:
-    """Graph Laplacian loss over the edges inside a minibatch (scANCVI estimator)."""
+    """Graph Laplacian loss over the edges inside a minibatch (scANCVI estimator).
+
+    Parameters
+    ----------
+    z
+        ``(n_cells, latent_dim)`` latent codes of the minibatch.
+    cells
+        Row positions of the minibatch cells in the model's AnnData.
+    graph
+        The graph on the same device.
+
+    Returns
+    -------
+    Scalar loss over the edges whose two cells are both in the minibatch.
+    """
     src, dst, w, g = graph.batch_edges(cells.reshape(-1))
     if w.numel() == 0:
         return z.sum() * 0.0
@@ -294,7 +332,19 @@ def pair_laplacian_loss(
     groups: torch.Tensor,
     n_groups: int,
 ) -> torch.Tensor:
-    """Graph Laplacian loss over sampled (anchor, neighbour) pairs."""
+    """Graph Laplacian loss over sampled (anchor, neighbour) pairs.
+
+    Parameters
+    ----------
+    z_anchor, z_neighbor
+        ``(n_pairs, latent_dim)`` latent codes of anchors and their sampled neighbours.
+    pair_weight
+        Pair weights (the anchor's degree; 0 for anchors without neighbours).
+    groups
+        Group (sample) code of each anchor.
+    n_groups
+        Number of groups.
+    """
     pair_weight = pair_weight.reshape(-1)
     keep = pair_weight > 0
     return grouped_laplacian(
@@ -309,6 +359,20 @@ class NeighborBatchSampler:
     Anchors are a random permutation of ``indices`` cut into minibatches. Each anchor gets one
     neighbour among ``indices`` drawn with probability ``w_ij / deg_i``; the pair weight is
     ``deg_i`` (0 for anchors without neighbours, whose neighbour is the anchor itself).
+    With these weights the expected pair loss equals the full-graph loss.
+
+    Parameters
+    ----------
+    graph
+        The cell graph.
+    indices
+        Cells to sample from (the training split); edges to other cells are ignored.
+    batch_size
+        Number of anchors per minibatch.
+    drop_last
+        Drop the last incomplete minibatch.
+    seed
+        Random seed.
     """
 
     def __init__(

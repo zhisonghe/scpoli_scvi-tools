@@ -14,8 +14,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-leiden = ["scanpy>=1.10", "igraph", "leidenalg"]
+# umap-learn 0.6.0 breaks scanpy.tl.umap (scanpy 1.12) on >~4k cells (numba TypingError)
+leiden = ["scanpy>=1.10", "igraph", "leidenalg", "umap-learn<0.6"]
 test = ["pytest>=8", "scanpy>=1.10", "igraph", "leidenalg"]
+docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/scpolivi"]

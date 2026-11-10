@@ -60,7 +60,7 @@ class SCPoliTrainingPlan(TrainingPlan):
         First epoch with the graph loss (default: ``pretraining_epochs``, i.e. together with
         the prototype losses).
     graph_use_mean
-        Use the latent mean instead of a sample in the graph loss (scANCVI samples).
+        Apply the graph loss to latent means instead of samples (default ``False``, as scANCVI).
     keep_prototypes
         At the start of the prototype phase, keep existing prototypes instead of
         re-initializing them (used to fine-tune a trained model).

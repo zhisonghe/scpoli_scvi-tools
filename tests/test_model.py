@@ -163,3 +163,23 @@ def test_projection_like_scarches(gadata):
     qm.train(n_epochs=2, pretraining_epochs=1, **FAST)
     z = qm.get_latent(gadata.copy(), mean=True)  # joint projection of reference + query
     assert z.shape == (gadata.n_obs, 8) and np.isfinite(z).all()
+
+
+def test_minify_adata(gadata, tmp_path):
+    a = gadata.copy()
+    m = fit(a, n_epochs=4)
+    z = m.get_latent(mean=True)
+    preds = m.classify(use_mean=True)["ct_fine"]["preds"]
+    torch.manual_seed(0)
+    expr = np.asarray(m.get_normalized_expression(n_samples=20, return_mean=True))
+    m.minify_adata()
+    assert m.minified_data_type is not None and m.adata.X.nnz == 0
+    np.testing.assert_allclose(m.get_latent(mean=True), z)
+    assert (m.classify(use_mean=True)["ct_fine"]["preds"] == preds).all()
+    torch.manual_seed(0)
+    np.testing.assert_allclose(np.asarray(m.get_normalized_expression(n_samples=20, return_mean=True)), expr, rtol=1e-5)
+    with pytest.raises(ValueError, match="minified"):
+        m.train(n_epochs=1, **FAST)
+    m.save(str(tmp_path / "mini"), save_anndata=True)
+    m2 = SCPOLI.load(str(tmp_path / "mini"))
+    np.testing.assert_allclose(m2.get_latent(mean=True), z)

@@ -19,7 +19,9 @@ from scvi import REGISTRY_KEYS, settings
 from scvi.data import AnnDataManager
 from scvi.data._constants import _SETUP_ARGS_KEY
 from scvi.model._utils import parse_device_args
-from scvi.model.base import ArchesMixin, BaseModelClass, RNASeqMixin, VAEMixin
+from scvi.data._constants import ADATA_MINIFY_TYPE
+from scvi.data._utils import _get_adata_minify_type
+from scvi.model.base import ArchesMixin, BaseMinifiedModeModelClass, RNASeqMixin, VAEMixin
 from scvi.train import TrainRunner
 from scvi.utils import setup_anndata_dsp
 
@@ -56,8 +58,18 @@ class _RegistryAttr:
         pass
 
 
-class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
+class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseMinifiedModeModelClass):
     """scPoli: population-level integration with condition embeddings and prototypes.
+
+    A conditional VAE in which every condition key (e.g. study, sample, technology) gets a
+    learned embedding, combined with cell-type prototypes in the latent space. Labeled
+    prototypes are class centroids used for label transfer and uncertainty; unlabeled
+    prototypes (cluster centroids) structure unlabeled cells. Reference models are extended to
+    query data with :meth:`load_query_data` (scArches surgery), which only learns embeddings
+    for the new conditions.
+
+    Typical workflow: :meth:`setup_anndata` → ``SCPOLI(adata)`` → :meth:`train` →
+    :meth:`get_latent` / :meth:`classify` → :meth:`load_query_data` on new data.
 
     Parameters
     ----------
@@ -89,8 +101,18 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         Explicit condition metadata, overrides ``share_metadata``.
     **module_kwargs
         Passed to :class:`~scpolivi.module.SCPOLIVAE`.
+
+    Examples
+    --------
+    >>> SCPOLI.setup_anndata(adata, condition_keys="study", cell_type_keys="cell_type")
+    >>> model = SCPOLI(adata, embedding_dims=5)
+    >>> model.train(n_epochs=50, pretraining_epochs=40, eta=5)
+    >>> adata.obsm["X_scpoli"] = model.get_latent(mean=True)
     """
 
+    _LATENT_QZM_KEY = "scpoli_latent_qzm"
+    _LATENT_QZV_KEY = "scpoli_latent_qzv"
+    _OBSERVED_LIB_SIZE_KEY = "scpoli_observed_lib_size"
     _module_cls = SCPOLIVAE
     _data_splitter_cls = SCPoliDataSplitter
     _training_plan_cls = SCPoliTrainingPlan
@@ -151,6 +173,7 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
             **module_kwargs,
         )
         self.module.combined_to_conditions = self._combined_to_conditions()
+        self.module.minified_data_type = self.minified_data_type
 
         if obs_metadata is not None:
             self.obs_metadata_ = obs_metadata
@@ -218,6 +241,9 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
             preserve_categories=overrides.get("preserve_categories", False),
         )
         fields = build_fields(layer, condition_keys, cell_type_keys, unknown_ct_names)
+        minify_type = _get_adata_minify_type(adata)
+        if minify_type is not None:
+            fields += cls._get_fields_for_adata_minification(minify_type)
         adata_manager = AnnDataManager(fields=fields, setup_method_args=setup_method_args)
         adata_manager.register_fields(adata, **kwargs)
         cls.register_manager(adata_manager)
@@ -379,12 +405,23 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
             First epoch with the graph loss (default: with the prototype losses, after
             ``pretraining_epochs``).
         graph_use_mean
-            Use the latent mean instead of a sample in the graph loss.
+            Apply the graph loss to the latent means instead of sampled latents (default
+            ``False``, as scANCVI). Both pull neighbouring means together with the same
+            expected gradient; with samples the loss also shrinks posterior variances.
         seed
             If given, sets ``scvi.settings.seed`` (scArches reseeds with 2020 by default).
+        n_workers
+            Dataloader worker processes.
+        accelerator, devices
+            Lightning accelerator (``"cpu"``, ``"gpu"``, ``"mps"``, ``"auto"``) and devices.
         plan_kwargs, datasplitter_kwargs, trainer_kwargs
             Extra arguments for the training plan, data splitter and Lightning trainer.
         """
+        if self.minified_data_type is not None:
+            raise ValueError(
+                "This model's AnnData is minified (no expression data); training needs the full "
+                "data. Load the model with the full AnnData instead."
+            )
         if seed is not None:
             settings.seed = seed
         graph = self.cell_graph if graph_weight and graph_weight > 0 else None
@@ -521,6 +558,36 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
             **train_kwargs,
         )
 
+    # ------------------------------------------------------------------ minification
+    def minify_adata(
+        self,
+        minified_data_type: str = ADATA_MINIFY_TYPE.LATENT_POSTERIOR,
+        use_latent_qzm_key: str = "X_latent_qzm",
+        use_latent_qzv_key: str = "X_latent_qzv",
+    ) -> None:
+        """Replace the model's AnnData by a minified copy that keeps only the latent posterior.
+
+        The expression matrix is dropped (unless ``minified_data_type`` is
+        ``"latent_posterior_parameters_with_counts"``); latent mean and variance and the library
+        size are stored instead. ``get_latent``, ``classify`` on the model's cells,
+        ``get_normalized_expression`` and saving keep working on the much smaller object;
+        training does not. Minification does not change how the model is trained.
+
+        Parameters
+        ----------
+        minified_data_type
+            ``"latent_posterior_parameters"`` (drop counts) or
+            ``"latent_posterior_parameters_with_counts"``.
+        use_latent_qzm_key, use_latent_qzv_key
+            ``adata.obsm`` keys with the posterior mean and variance; computed here if
+            missing.
+        """
+        if use_latent_qzm_key not in self.adata.obsm or use_latent_qzv_key not in self.adata.obsm:
+            qzm, qzv = self.get_latent_representation(give_mean=True, return_dist=True)
+            self.adata.obsm[use_latent_qzm_key] = qzm
+            self.adata.obsm[use_latent_qzv_key] = qzv
+        super().minify_adata(minified_data_type, use_latent_qzm_key, use_latent_qzv_key)
+
     # ------------------------------------------------------------------ graph
     @property
     def cell_graph(self):
@@ -621,7 +688,21 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         return torch.cat(out)
 
     def get_latent(self, adata: AnnData | None = None, mean: bool = False) -> np.ndarray:
-        """Latent representation (scArches API). ``mean=False`` samples from q(z|x)."""
+        """Latent representation of cells (scArches API).
+
+        Parameters
+        ----------
+        adata
+            Cells to embed (default: the registered AnnData). Any AnnData with the model's
+            genes and condition columns of known conditions; cell-type columns are optional.
+        mean
+            Return the posterior mean. ``False`` (scArches default) draws one sample from
+            ``q(z|x)``; use ``True`` for downstream analysis.
+
+        Returns
+        -------
+        ``(n_cells, latent_dim)`` array.
+        """
         return self._latent(adata, mean).numpy()
 
     @torch.inference_mode()
@@ -654,7 +735,9 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         scale_uncertainties
             RobustScaler followed by MinMax scaling to [0, 1] of the uncertainties.
         use_mean
-            Classify the latent mean instead of a sample (scArches samples).
+            Classify the latent mean instead of a sample (scArches samples). Recommended.
+        batch_size
+            Minibatch size of the latent pass.
 
         Returns
         -------
@@ -693,7 +776,14 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         return results
 
     def get_conditional_embeddings(self) -> AnnData | dict[str, AnnData]:
-        """Condition embeddings as AnnData (a dict keyed by condition key if several keys)."""
+        """Learned condition embeddings.
+
+        Returns
+        -------
+        For one condition key, an AnnData with one row per condition (``obs_names`` are the
+        conditions) and the embedding in ``X``; for several keys, a dict of such AnnData keyed
+        by condition key.
+        """
         out = {}
         for i, (key, cats) in enumerate(self.conditions_.items()):
             w = self.module.get_embedding(f"cond_{i}").weight.detach().cpu().numpy()
@@ -702,7 +792,20 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         return out[keys[0]] if len(keys) == 1 else out
 
     def get_prototypes_info(self, prototype_set: Literal["labeled", "unlabeled"] = "labeled") -> AnnData:
-        """AnnData of prototype positions with their annotation and classification."""
+        """Prototype positions with their annotation and classification.
+
+        Parameters
+        ----------
+        prototype_set
+            ``"labeled"`` (cell-type prototypes) or ``"unlabeled"`` (cluster prototypes).
+
+        Returns
+        -------
+        AnnData with one row per prototype (latent position in ``X``) and, per cell-type
+        level, ``obs`` columns ``<level>`` (annotation), ``<level>_pred`` and
+        ``<level>_uncert`` (nearest labeled prototype). Useful to plot prototypes on top of
+        the cells and to decide which unlabeled prototypes form a new cell type.
+        """
         if prototype_set == "labeled":
             protos = self.module.prototypes_labeled_mean.detach().cpu().numpy()
             batch_name = "prototype-Set Labeled"
@@ -734,7 +837,19 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         """Turn unlabeled prototypes into a labeled prototype of a new cell type.
 
         The new prototype is the mean of the given unlabeled prototypes; its covariance is
-        computed from the cells (of ``adata``, default: the registered data) assigned to it.
+        computed from the cells assigned to it. Afterwards :meth:`classify` can predict the
+        new type.
+
+        Parameters
+        ----------
+        cell_type_name
+            Name of the new cell type.
+        obs_key
+            Cell-type level (one of the cell-type keys) the new type belongs to.
+        prototypes
+            Indices of unlabeled prototypes (see ``get_prototypes_info("unlabeled")``).
+        adata
+            Cells used for the covariance (default: the registered AnnData).
         """
         if cell_type_name in self.cell_types_:
             raise ValueError(f"Cell type {cell_type_name!r} already exists.")
@@ -775,7 +890,14 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         return list(self._per_instance_manager_store.get(self.id, {}).values())
 
     def update_labeled_indices(self, labeled_indices: Sequence[int]) -> None:
-        """Change which cells of the registered AnnData count as labeled."""
+        """Change which cells of the registered AnnData count as labeled.
+
+        Parameters
+        ----------
+        labeled_indices
+            Positional indices of labeled cells; all other cells become unlabeled (they still
+            train the VAE and the unlabeled prototypes, but not the labeled prototypes).
+        """
         flag = np.zeros(self.adata.n_obs, dtype=np.float32)
         flag[np.asarray(labeled_indices, dtype=int)] = 1.0
         self.adata.obs[LABELED_COL] = flag
@@ -787,10 +909,21 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         batch_size: int = 128,
         condition_map: dict[str, dict[str, str]] | None = None,
     ) -> float:
-        """Mean reconstruction loss (z sampled), optionally replacing conditions.
+        """Mean reconstruction loss per cell (z sampled), optionally swapping conditions.
 
-        ``condition_map[key][value] = other_value`` evaluates cells of ``value`` as if they
-        came from ``other_value`` (embedding and dispersion), as in scArches ``shot_surgery``.
+        Parameters
+        ----------
+        adata
+            Cells to evaluate (default: the registered AnnData).
+        batch_size
+            Minibatch size.
+        condition_map
+            ``condition_map[key][value] = other_value`` evaluates cells of ``value`` as if they
+            came from ``other_value`` (embedding and dispersion), as in :meth:`shot_surgery`.
+
+        Returns
+        -------
+        Mean negative log-likelihood per cell.
         """
         adata = self._validate_anndata(adata)
         conds = self.conditions_
@@ -851,6 +984,14 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
             Set dropout to 0 in the query model.
         return_new_conditions
             Also return ``{key: [new conditions]}``.
+        accelerator, device
+            Where to load the model.
+        inplace_subset_query_vars
+            Subset the query's genes to the reference genes in place.
+
+        Returns
+        -------
+        The query model (untrained), or ``(model, new_conditions)``.
         """
         if not isinstance(reference_model, str):
             ref_conditions = deepcopy(reference_model.conditions_)
@@ -942,7 +1083,27 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
         reconstruction loss (other keys unchanged) is chosen and its embedding (and the
         dispersion of the matching combined condition) is copied. Optionally fine-tune.
 
-        Returns ``(model, mapping)`` with ``mapping[key][new] = reference`` (a flat
+        Parameters
+        ----------
+        adata
+            Query data (see :meth:`load_query_data`).
+        reference_model
+            Trained reference model or path to a saved one.
+        labeled_indices, unknown_ct_names
+            As in :meth:`load_query_data`.
+        train_epochs
+            If > 0, fine-tune the query model (embeddings and dispersion) for this many
+            epochs after the mapping.
+        batch_size
+            Minibatch size of the reconstruction-loss evaluation.
+        subsample
+            Fraction of query cells used to evaluate the reconstruction loss.
+        **train_kwargs
+            Passed to :meth:`train` when ``train_epochs > 0``.
+
+        Returns
+        -------
+        ``(model, mapping)`` with ``mapping[key][new] = reference`` (a flat
         ``{new: reference}`` dict for a single condition key, as in scArches).
         """
         if not 0 < subsample <= 1:
@@ -1007,8 +1168,24 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseModelClass):
     ) -> SCPOLI:
         """Load a model saved by scArches ``scPoli.save`` (scArches not required).
 
-        ``adata`` must contain the model's genes (same order) and condition columns; its
-        cell-type columns are optional.
+        Reads ``attr.pkl``, ``model_params.pt`` and ``var_names.csv``, registers ``adata``
+        with scArches' category orders and converts the weights and prototypes. The result
+        gives the same latents as scArches and can be trained, mapped to queries and saved
+        like any SCPOLI model.
+
+        Parameters
+        ----------
+        dir_path
+            Directory written by scArches ``scPoli.save``.
+        adata
+            Data with the model's genes (same order) and condition columns; cell-type
+            columns are optional.
+        accelerator, device
+            Where to load the model.
+
+        Returns
+        -------
+        SCPOLI model.
         """
         from ._scarches_io import (
             combined_to_conditions,

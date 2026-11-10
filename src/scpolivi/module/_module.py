@@ -10,7 +10,12 @@ from torch.distributions import kl_divergence as kl
 
 from scvi import REGISTRY_KEYS
 from scvi.distributions import NegativeBinomial, Poisson, ZeroInflatedNegativeBinomial
-from scvi.module.base import BaseModuleClass, EmbeddingModuleMixin, LossOutput, auto_move_data
+from scvi.module.base import (
+    BaseMinifiedModeModuleClass,
+    EmbeddingModuleMixin,
+    LossOutput,
+    auto_move_data,
+)
 
 from .. import graph as G
 from .._constants import GRAPH_GROUP_KEY, GRAPH_PAIR_WEIGHT_KEY, GRAPH_ROLE_KEY
@@ -27,7 +32,7 @@ _PROTO_BUFFERS = (
 )
 
 
-class SCPOLIVAE(EmbeddingModuleMixin, BaseModuleClass):
+class SCPOLIVAE(EmbeddingModuleMixin, BaseMinifiedModeModuleClass):
     """scPoli module.
 
     Parameters
@@ -178,7 +183,16 @@ class SCPOLIVAE(EmbeddingModuleMixin, BaseModuleClass):
         )
 
     # ------------------------------------------------------------- VAE interface
-    def _get_inference_input(self, tensors: dict[str, torch.Tensor], **kwargs) -> dict:
+    def _get_inference_input(
+        self, tensors: dict[str, torch.Tensor], full_forward_pass: bool = False, **kwargs
+    ) -> dict:
+        if self.minified_data_type is not None and not full_forward_pass:
+            # minified AnnData: cached latent posterior instead of the encoder
+            return {
+                "qzm": tensors[REGISTRY_KEYS.LATENT_QZM_KEY],
+                "qzv": tensors[REGISTRY_KEYS.LATENT_QZV_KEY],
+                "observed_lib_size": tensors[REGISTRY_KEYS.OBSERVED_LIB_SIZE],
+            }
         return {
             "x": tensors[REGISTRY_KEYS.X_KEY],
             "conditions": tensors[SK.CONDITIONS_KEY],
@@ -193,7 +207,29 @@ class SCPOLIVAE(EmbeddingModuleMixin, BaseModuleClass):
         }
 
     @auto_move_data
-    def inference(self, x: torch.Tensor, conditions: torch.Tensor, n_samples: int = 1) -> dict:
+    def _cached_inference(
+        self,
+        qzm: torch.Tensor,
+        qzv: torch.Tensor,
+        observed_lib_size: torch.Tensor,
+        n_samples: int = 1,
+    ) -> dict:
+        """Inference from a minified AnnData (stored posterior mean/variance, no encoder)."""
+        qz = Normal(qzm, qzv.sqrt())
+        z = qz.sample() if n_samples == 1 else qz.sample((n_samples,))
+        lib = observed_lib_size.reshape(-1, 1)
+        if self.recon_loss == "mse":
+            lib = lib.abs().clamp(min=1e-8)
+        library = torch.log(lib)
+        if n_samples > 1:
+            library = library.unsqueeze(0).expand(n_samples, *library.shape)
+        return {"z": z, "qz": qz, "library": library, "z_mean": qzm, "z_log_var": torch.log(qzv)}
+
+    @auto_move_data
+    def _regular_inference(
+        self, x: torch.Tensor, conditions: torch.Tensor, n_samples: int = 1
+    ) -> dict:
+        """Encoder pass."""
         x_ = torch.log1p(x) if self.log_variational else x
         emb = self.condition_embedding(conditions) if "encoder" in self.inject_condition else None
         z_mean, z_log_var = self.encoder(x_, emb)

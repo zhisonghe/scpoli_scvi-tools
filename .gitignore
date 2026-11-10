@@ -6,3 +6,5 @@ __pycache__/
 external/
 *.log
 .DS_Store
+results/
+site/

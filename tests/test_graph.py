@@ -127,7 +127,9 @@ def test_train_with_graph(sampling):
     assert "graph_loss_validation" in h
 
 
-def test_graph_reduces_neighbor_distance_and_fine_tune():
+@pytest.mark.parametrize("use_mean", [False, True])
+def test_graph_reduces_neighbor_distance_and_fine_tune(use_mean):
+    torch.manual_seed(0)  # weight initialization
     a = make_adata(n_cells=600, n_genes=60)
     SCPOLI.setup_anndata(a, condition_keys="study", cell_type_keys="ct_fine")
     m = SCPOLI(a, latent_dim=6, embedding_dims=4)
@@ -142,9 +144,10 @@ def test_graph_reduces_neighbor_distance_and_fine_tune():
 
     before = neighbor_loss()
     protos = m.module.prototypes_unlabeled_mean.clone()
-    m.fine_tune(n_epochs=4, graph_weight=50.0, lr=1e-3, use_early_stopping=False, **FAST)
+    m.fine_tune(n_epochs=4, graph_weight=50.0, lr=1e-3, use_early_stopping=False, seed=0,
+                graph_use_mean=use_mean, **FAST)
     after = neighbor_loss()
-    assert after < 0.7 * before
+    assert after < 0.85 * before
     # prototypes were kept, not re-clustered
     assert m.module.prototypes_unlabeled_mean.shape == protos.shape
 

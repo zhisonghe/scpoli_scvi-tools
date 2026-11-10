@@ -13,8 +13,9 @@
 | 6 scArches checkpoint import | Done (`SCPOLI.from_scarches`). Latents match scArches to 1e-4 for reference and query checkpoints. |
 | 7 Benchmark | Synthetic: at 2.4k cells, reference kNN accuracy 0.962 (scArches 0.935), query label transfer 0.798 (scArches 0.787). Pancreas tutorial, 3 seeds (`scripts/run_pancreas_scpolivi.py`, `scripts/eval_pancreas.py`): query accuracy 0.972–0.977 (scArches 0.974–0.978); kNN cell-type accuracy, cell-type ASW, study mixing and within-study neighbour overlap all within scArches' seed range. ATAC and a large atlas still pending. |
 | 9 Projection | `get_latent`/`classify` on new AnnData work as in scArches (cell-type columns optional, unknown conditions rejected with a clear error); in addition, gene order is checked. |
-| 10 Graph Laplacian loss (scANCVI) | Done: `set_graph`, `train(graph_weight=..., graph_sampling=...)`, `fine_tune`, `scpolivi.graph.construct_sample_graphs`. In-batch estimator matches scANCVI's loss exactly; a neighbour-sampling estimator targets the same objective. Pancreas (seed 0 only): within-study neighbour overlap 0.238 → 0.245–0.249, study mixing 0.47 → 0.42–0.45, label transfer unchanged at weight 10, lower at 100. |
-| 8 Docs, release | Not started. |
+| 10 Graph Laplacian loss (scANCVI) | Done: `set_graph`, `train(graph_weight=..., graph_sampling=...)`, `fine_tune`, `scpolivi.graph.construct_sample_graphs`. In-batch estimator matches scANCVI's loss exactly; a neighbour-sampling estimator targets the same objective. Pancreas, 3 seeds, weight 10, sampled z (default): neighbour overlap 0.238–0.240 → 0.242–0.249, ASW 0.803–0.809 → 0.812–0.824, label transfer and mixing unchanged; weight 100 costs mixing and accuracy. |
+| 8 Docs | Done: README, MkDocs site (`mkdocs.yml`, `docs/`; user guide, 5 walkthrough scripts in `examples/`, API reference from docstrings, benchmarks). CI dropped (not needed). |
+| 11 Minified AnnData | Done (`minify_adata`); no effect on training speed (measured). |
 
 Environments: `.venv` (runtime, no scArches) and `.venv-parity` (adds scArches, `pandas<3`, because
 scArches scPoli fails with pandas 3: positional `Series[...]` indexing). Tests: `.venv/bin/python -m pytest`.
@@ -35,8 +36,9 @@ scArches scPoli fails with pandas 3: positional `Series[...]` indexing). Tests: 
 13. `classify(use_mean=False)` samples z as scArches does. On under-trained models this costs a lot of
     accuracy (synthetic: 0.27 sampled vs 0.47 mean), so `use_mean=True` is recommended.
 
-### Not yet covered
-- Multi-GPU/DDP (epoch-end prototype passes run on one device), minified AnnData.
+### Not covered
+- Multi-GPU/DDP: opt-in in scvi-tools (not a default model feature); not supported here (epoch-end prototype passes run on one device).
+- ATAC tutorial and a large-atlas benchmark.
 
 Sources reviewed (in `external/`):
 - scArches `d35cde6` (2026-06): `models/scpoli/`, `trainers/scpoli/`, `dataset/scpoli/`, `models/base/_base.py`

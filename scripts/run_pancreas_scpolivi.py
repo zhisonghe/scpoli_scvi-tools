@@ -45,8 +45,8 @@ def sample_graphs(adata):
     )
 
 
-def main(seed: int, graph_weight: float, graph_mode: str, graph_sampling: str):
-    tag = "base" if graph_weight == 0 else f"graph{graph_mode}_w{graph_weight:g}_{graph_sampling}"
+def main(seed: int, graph_weight: float, graph_mode: str, graph_sampling: str, use_mean: bool = True):
+    tag = "base" if graph_weight == 0 else f"graph{graph_mode}_w{graph_weight:g}_{graph_sampling}" + ("" if use_mean else "_sampledz")
     out = ROOT / "data" / "scpolivi" / f"pancreas_{tag}_seed{seed}"
     out.mkdir(parents=True, exist_ok=True)
 
@@ -57,7 +57,7 @@ def main(seed: int, graph_weight: float, graph_mode: str, graph_sampling: str):
 
     gkw = {}
     if graph_weight > 0:
-        gkw = {"graph_weight": graph_weight, "graph_sampling": graph_sampling}
+        gkw = {"graph_weight": graph_weight, "graph_sampling": graph_sampling, "graph_use_mean": use_mean}
 
     t0 = time.time()
     SCPOLI.setup_anndata(source, condition_keys="study", cell_type_keys="cell_type")
@@ -135,5 +135,6 @@ if __name__ == "__main__":
     p.add_argument("--graph-weight", type=float, default=0.0)
     p.add_argument("--graph-mode", choices=["scratch", "finetune"], default="scratch")
     p.add_argument("--graph-sampling", choices=["batch", "neighbors"], default="neighbors")
+    p.add_argument("--graph-sampled-z", action="store_true", help="scANCVI: graph loss on sampled z")
     a = p.parse_args()
-    main(a.seed, a.graph_weight, a.graph_mode, a.graph_sampling)
+    main(a.seed, a.graph_weight, a.graph_mode, a.graph_sampling, not a.graph_sampled_z)
