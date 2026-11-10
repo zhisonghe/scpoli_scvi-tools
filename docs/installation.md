@@ -63,7 +63,7 @@ mkdocs build      # static site in ./site
 
 ## Example data
 
-The walkthroughs use the pancreas data of the scArches scPoli tutorial (16,382 cells, 4,000
+The tutorials use the pancreas data of the scArches scPoli tutorial (16,382 cells, 4,000
 genes, 9 studies). It is available from figshare:
 <https://figshare.com/ndownloader/files/41581626>. Save it as `data/pancreas_sparse.h5ad`, or
 pass another path with `--data`.

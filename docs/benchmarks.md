@@ -17,7 +17,7 @@ differ. Equivalence of trained models is therefore assessed statistically, below
 ## Pancreas tutorial
 
 Protocol of the scArches scPoli surgery tutorial: 7 reference studies without alpha cells
-(8,634 cells), 2 CEL-Seq query studies (7,748 cells), 4,000 genes, `embedding_dims=5`, 50 epochs
+(8,634 cells), 2 CEL-Seq query studies (3,289 cells), 4,000 genes, `embedding_dims=5`, 50 epochs
 (40 pretraining), `eta=5` for the reference, `eta=10` for the query, unlabeled query. Each run was
 scored on the joint reference + query latent by `scripts/eval_pancreas.py`:
 

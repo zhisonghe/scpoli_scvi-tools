@@ -19,7 +19,7 @@ The same information, organized for the web, is in the documentation site (`mkdo
 - [Query mapping and projection](#query-mapping-and-projection)
 - [Graph regularization](#graph-regularization)
 - [Coming from scArches](#coming-from-scarches)
-- [Walkthrough scripts](#walkthrough-scripts)
+- [Tutorials](#tutorials)
 - [API overview](#api-overview)
 - [Benchmarks](#benchmarks)
 - [Documentation](#documentation)
@@ -155,7 +155,7 @@ model.fine_tune(n_epochs=10, graph_weight=10, eta=5)
 | Option | Default | Meaning |
 |---|---|---|
 | `graph_weight` | 0 | loss weight; 10 worked well on pancreas, 100 started to cost batch mixing and label transfer |
-| `graph_sampling` | `"neighbors"` | each minibatch cell brings one sampled neighbour. `"batch"` (scANCVI) only sees edges inside random minibatches, about 10–25 per step at batch size 128 |
+| `graph_sampling` | `"neighbors"` | each minibatch cell brings one sampled neighbour, which doubles the cost of epochs with the graph loss. `"batch"` (scANCVI) is almost free but only sees edges inside random minibatches, about 10–25 per step at batch size 128 |
 | `graph_use_mean` | False | loss on latent means instead of samples (scANCVI uses samples; the pull on the means is the same, and samples also shrink posterior variances) |
 | `graph_start_epoch` | `pretraining_epochs` | first epoch with the loss |
 
@@ -195,17 +195,29 @@ Behaviour differences, all deliberate:
 
 The full list is in the documentation ("Coming from scArches").
 
-## Walkthrough scripts
+## Tutorials
 
-The `examples/` scripts run on the pancreas data. Each takes `--data`; most also take `--epochs`.
+Jupyter notebooks in [`docs/tutorials/`](docs/tutorials), executed with their outputs, that use
+the Python API on the pancreas data (GitHub renders them directly):
 
-| Script | Covers |
+| Notebook | Covers |
 |---|---|
-| `01_reference_and_query.py` | setup, training, query mapping, label transfer, uncertainty, UMAP |
-| `02_multiple_keys_and_hierarchy.py` | two condition keys, two label levels, unknown and partial labels, condition embeddings, adding a new cell type |
-| `03_projection_and_minification.py` | projection, gene matching, shot surgery, minified AnnData (uses the model from script 1) |
-| `04_graph_regularization.py` | sample graphs, graph loss from scratch, fine-tuning, query with a graph |
-| `05_from_scarches.py` | importing a scArches checkpoint and mapping a query onto it |
+| [1. Reference and query](docs/tutorials/01_reference_and_query.ipynb) | setup, training phases, query mapping, label transfer, uncertainty, joint embedding, prototypes, condition embeddings |
+| [2. Several keys, hierarchy, new types](docs/tutorials/02_multiple_keys_and_hierarchy.ipynb) | two condition keys, two label levels, unknown and partial labels, finding and adding a new cell type |
+| [3. Projection and trained models](docs/tutorials/03_projection_and_minification.ipynb) | projection, gene matching, shot surgery, normalized expression, differential expression, minification |
+| [4. Graph regularization](docs/tutorials/04_graph_regularization.ipynb) | sample graphs, graph loss from scratch, fine-tuning, query with a graph |
+| [5. Moving from scArches](docs/tutorials/05_from_scarches.ipynb) | translating code, importing a scArches checkpoint, continuing in scpolivi |
+
+To run them locally:
+
+```bash
+pip install ".[tutorials]"
+jupyter lab docs/tutorials
+```
+
+The notebooks read `data/pancreas_sparse.h5ad` relative to the repository root, and notebook 3
+uses the model saved by notebook 1. `python scripts/build_tutorials.py` re-executes all of them.
+The same workflows exist as command-line scripts in `examples/` for batch jobs.
 
 ## API overview
 

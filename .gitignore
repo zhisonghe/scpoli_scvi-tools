@@ -8,3 +8,4 @@ external/
 .DS_Store
 results/
 site/
+.cache/

@@ -72,7 +72,9 @@ edges per step: an unbiased but very noisy estimate. In the default `"neighbors"
 minibatch cell brings one graph neighbour, drawn in proportion to the edge weight. The
 neighbours only enter the graph loss, and pair weights equal the anchor's degree, so both
 modes estimate the same objective. On pancreas, `"batch"` mode did not improve neighbourhood
-preservation at all.
+preservation at all. The price is compute: each minibatch carries twice as many cells, so
+epochs with the graph loss take about twice as long (pancreas: 2.1 → 4.2 s per epoch on a
+laptop CPU). `"batch"` mode adds almost no cost.
 
 **`graph_use_mean`.** By default the loss uses sampled latents, as in scANCVI. For samples,
 $\mathbb{E}\lVert z_i - z_j\rVert^2 = \lVert\mu_i-\mu_j\rVert^2 + \operatorname{tr}\Sigma_i + \operatorname{tr}\Sigma_j$.

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block content %}
+  {% if page.file and page.file.src_uri.endswith(".ipynb") %}
+    <a href="{{ page.file.src_uri.split('/')[-1] }}" download
+       class="md-content__button md-icon" title="Download this notebook">
+      {% include ".icons/material/download.svg" %}
+    </a>
+  {% endif %}
+  {{ super() }}
+{% endblock %}

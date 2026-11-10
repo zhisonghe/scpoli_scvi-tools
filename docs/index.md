@@ -54,7 +54,7 @@ latent = query_model.get_latent(query, mean=True)
 
 - [Installation](installation.md)
 - [Concepts](concepts.md): what the model does and the meaning of its options.
-- [Walkthroughs](examples/index.md): five runnable scripts on the pancreas data.
+- [Tutorials](tutorials/index.md): five executed Jupyter notebooks on the pancreas data.
 - [Coming from scArches](scarches.md): argument mapping, behaviour differences, importing models.
 - [API reference](api/index.md)
 
