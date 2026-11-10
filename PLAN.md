@@ -38,7 +38,7 @@ scArches scPoli fails with pandas 3: positional `Series[...]` indexing). Tests: 
 
 ### Not covered
 - Multi-GPU/DDP: opt-in in scvi-tools (not a default model feature); not supported here (epoch-end prototype passes run on one device).
-- ATAC tutorial and a large-atlas benchmark.
+- Out of scope for now (decided 2026-11-10): ATAC tutorial; large-atlas benchmark (to be done when needed).
 
 Sources reviewed (in `external/`):
 - scArches `d35cde6` (2026-06): `models/scpoli/`, `trainers/scpoli/`, `dataset/scpoli/`, `models/base/_base.py`

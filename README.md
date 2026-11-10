@@ -47,7 +47,7 @@ Requires Python 3.10–3.13. scvi-tools (≥ 1.5.2, < 1.6), PyTorch, AnnData and
 installed automatically.
 
 ```bash
-git clone <repository-url> scpolivi && cd scpolivi
+git clone https://github.com/zhisonghe/scpoli_scvi-tools.git && cd scpoli_scvi-tools
 pip install ".[leiden]"          # extra: scanpy + Leiden, for the default prototype init and graph building
 pip install -e ".[test]" && pytest   # development
 ```

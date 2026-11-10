@@ -1,6 +1,7 @@
 site_name: scpolivi
 site_description: scPoli on scvi-tools — population-level integration with condition embeddings and prototypes
-repo_url: ""
+repo_url: https://github.com/zhisonghe/scpoli_scvi-tools
+repo_name: zhisonghe/scpoli_scvi-tools
 docs_dir: docs
 site_dir: site
 

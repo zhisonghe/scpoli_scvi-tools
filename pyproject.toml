@@ -13,6 +13,10 @@ dependencies = [
     "scikit-learn>=1.3",
 ]
 
+[project.urls]
+Repository = "https://github.com/zhisonghe/scpoli_scvi-tools"
+Documentation = "https://github.com/zhisonghe/scpoli_scvi-tools#readme"
+
 [project.optional-dependencies]
 # umap-learn 0.6.0 breaks scanpy.tl.umap (scanpy 1.12) on >~4k cells (numba TypingError)
 leiden = ["scanpy>=1.10", "igraph", "leidenalg", "umap-learn<0.6"]

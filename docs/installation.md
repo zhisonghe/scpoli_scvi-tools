@@ -22,8 +22,8 @@ Optional:
 ## Install from source
 
 ```bash
-git clone <repository-url> scpolivi
-cd scpolivi
+git clone https://github.com/zhisonghe/scpoli_scvi-tools.git
+cd scpoli_scvi-tools
 pip install ".[leiden]"
 ```
 
