@@ -1,0 +1,9 @@
+{
+  "name": "nb_dist_1key",
+  "kwargs": {
+    "condition_keys": "study",
+    "recon_loss": "nb_dist"
+  },
+  "status": "forward_error: TypeError: '<' not supported between instances of 'int' and 'list'",
+  "traceback": "Traceback (most recent call last):\n  File \"scripts/make_golden_synthetic.py\", line 142, in forward_golden\n    _, recon, kl, _ = m(**tens)\n                      ^^^^^^^^^\n  File \".venv-parity/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1787, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \".venv-parity/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1798, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"external/scarches/scarches/models/scpoli/scpoli.py\", line 183, in forward\n    dispersion = F.linear(one_hot_encoder(batch, self.n_conditions), self.theta)\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"external/scarches/scarches/models/scpoli/_utils.py\", line 11, in one_hot_encoder\n    assert torch.max(idx).item() < n_cls\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: '<' not supported between instances of 'int' and 'list'\n"
+}

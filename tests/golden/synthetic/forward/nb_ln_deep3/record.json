@@ -1,0 +1,13 @@
+{
+  "name": "nb_ln_deep3",
+  "kwargs": {
+    "condition_keys": "study",
+    "recon_loss": "nb",
+    "hidden_layer_sizes": [
+      64,
+      32,
+      16
+    ]
+  },
+  "status": "ok"
+}

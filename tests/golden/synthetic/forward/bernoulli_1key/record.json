@@ -1,0 +1,9 @@
+{
+  "name": "bernoulli_1key",
+  "kwargs": {
+    "condition_keys": "study",
+    "recon_loss": "bernoulli"
+  },
+  "status": "forward_error: TypeError: cannot unpack non-iterable NoneType object",
+  "traceback": "Traceback (most recent call last):\n  File \"scripts/make_golden_synthetic.py\", line 142, in forward_golden\n    _, recon, kl, _ = m(**tens)\n                      ^^^^^^^^^\n  File \".venv-parity/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1787, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \".venv-parity/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1798, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"external/scarches/scarches/models/scpoli/scpoli.py\", line 187, in forward\n    recon_x, y1 = outputs\n    ^^^^^^^^^^^\nTypeError: cannot unpack non-iterable NoneType object\n"
+}

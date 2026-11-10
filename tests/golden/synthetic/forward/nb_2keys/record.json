@@ -1,0 +1,15 @@
+{
+  "name": "nb_2keys",
+  "kwargs": {
+    "condition_keys": [
+      "study",
+      "tech"
+    ],
+    "recon_loss": "nb",
+    "embedding_dims": [
+      4,
+      3
+    ]
+  },
+  "status": "ok"
+}

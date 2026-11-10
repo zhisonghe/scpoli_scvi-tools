@@ -1,0 +1,8 @@
+{
+  "name": "nb_1key",
+  "kwargs": {
+    "condition_keys": "study",
+    "recon_loss": "nb"
+  },
+  "status": "ok"
+}

@@ -1,0 +1,11 @@
+{
+  "name": "nb_enc_only",
+  "kwargs": {
+    "condition_keys": "study",
+    "recon_loss": "nb",
+    "inject_condition": [
+      "encoder"
+    ]
+  },
+  "status": "ok"
+}

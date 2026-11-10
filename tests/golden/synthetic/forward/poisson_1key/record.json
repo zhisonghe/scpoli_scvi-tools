@@ -1,0 +1,8 @@
+{
+  "name": "poisson_1key",
+  "kwargs": {
+    "condition_keys": "study",
+    "recon_loss": "poisson"
+  },
+  "status": "ok"
+}

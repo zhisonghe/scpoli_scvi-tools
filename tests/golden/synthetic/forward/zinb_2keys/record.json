@@ -1,0 +1,11 @@
+{
+  "name": "zinb_2keys",
+  "kwargs": {
+    "condition_keys": [
+      "study",
+      "tech"
+    ],
+    "recon_loss": "zinb"
+  },
+  "status": "ok"
+}

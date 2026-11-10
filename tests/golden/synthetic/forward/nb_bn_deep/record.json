@@ -1,0 +1,17 @@
+{
+  "name": "nb_bn_deep",
+  "kwargs": {
+    "condition_keys": [
+      "study",
+      "tech"
+    ],
+    "recon_loss": "nb",
+    "use_bn": true,
+    "use_ln": false,
+    "hidden_layer_sizes": [
+      48,
+      24
+    ]
+  },
+  "status": "ok"
+}

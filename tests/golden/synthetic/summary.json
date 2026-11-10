@@ -1,0 +1,13 @@
+{
+  "nb_1key": "ok",
+  "nb_2keys": "ok",
+  "zinb_2keys": "ok",
+  "poisson_1key": "ok",
+  "mse_1key": "ok",
+  "nb_dist_1key": "forward_error: TypeError: '<' not supported between instances of 'int' and 'list'",
+  "bernoulli_1key": "forward_error: TypeError: cannot unpack non-iterable NoneType object",
+  "nb_enc_only": "ok",
+  "nb_dec_only": "ok",
+  "nb_bn_deep": "ok",
+  "nb_ln_deep3": "ok"
+}

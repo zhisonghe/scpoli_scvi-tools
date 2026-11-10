@@ -1,0 +1,8 @@
+{
+  "name": "mse_1key",
+  "kwargs": {
+    "condition_keys": "study",
+    "recon_loss": "mse"
+  },
+  "status": "ok"
+}

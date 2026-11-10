@@ -1,0 +1,75 @@
+{
+  "new_conditions": {
+    "study": [
+      "s3"
+    ],
+    "tech": []
+  },
+  "cell_types_": {
+    "B": [
+      "ct_fine"
+    ],
+    "T_CD8": [
+      "ct_fine"
+    ],
+    "T_CD4": [
+      "ct_fine"
+    ],
+    "Mono": [
+      "ct_fine"
+    ],
+    "Lymph_B": [
+      "ct_coarse"
+    ],
+    "T": [
+      "ct_coarse"
+    ],
+    "Myeloid": [
+      "ct_coarse"
+    ],
+    "NK": [
+      "ct_fine"
+    ],
+    "Lymph_NK": [
+      "ct_coarse"
+    ]
+  },
+  "nk_labeled_idx": [
+    2,
+    8,
+    10,
+    11,
+    18,
+    19,
+    29,
+    39,
+    45,
+    48,
+    56,
+    58,
+    59,
+    61,
+    62,
+    69,
+    70,
+    73,
+    74,
+    78
+  ],
+  "requires_grad": {
+    "theta": true,
+    "embeddings.0.weight": true,
+    "embeddings.1.weight": true,
+    "encoder.FC.L0.expr_L.weight": false,
+    "encoder.FC.L0.expr_L.bias": false,
+    "encoder.FC.L0.cond_L.weight": false,
+    "encoder.mean_encoder.weight": false,
+    "encoder.mean_encoder.bias": false,
+    "encoder.log_var_encoder.weight": false,
+    "encoder.log_var_encoder.bias": false,
+    "decoder.FirstL.L0.expr_L.weight": false,
+    "decoder.FirstL.L0.cond_L.weight": false,
+    "decoder.mean_decoder.0.weight": false,
+    "decoder.mean_decoder.0.bias": false
+  }
+}
