@@ -76,4 +76,6 @@ def test_surgery_from_imported_reference(golden_dir):
         if k.startswith(("encoder.", "decoder.")):
             np.testing.assert_array_equal(q_sd[k].cpu().numpy(), v.cpu().numpy())
     w_ref = ref_sd["_embeddings_dict.cond_0.weight"]
-    np.testing.assert_allclose(q_sd["_embeddings_dict.cond_0.weight"][: len(w_ref)], w_ref)
+    np.testing.assert_allclose(
+        q_sd["_embeddings_dict.cond_0.weight"][: len(w_ref)].cpu().numpy(), w_ref.cpu().numpy()
+    )
