@@ -1,11 +1,11 @@
 .venv*/
-data/
+/data/
 __pycache__/
 *.egg-info/
 .pytest_cache/
-external/
+/external/
 *.log
 .DS_Store
-results/
-site/
+/results/
+/site/
 .cache/
