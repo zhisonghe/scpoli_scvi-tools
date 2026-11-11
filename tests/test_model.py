@@ -107,9 +107,23 @@ def test_save_load_query_roundtrip(gadata, tmp_path):
     q.save(tmp_path / "q")
     q2 = SCPOLI.load(str(tmp_path / "q"), adata=qry)
     np.testing.assert_allclose(
-        q2.module.prototypes_unlabeled_mean.numpy(), q.module.prototypes_unlabeled_mean.numpy()
+        q2.module.prototypes_unlabeled_mean.cpu().numpy(),
+        q.module.prototypes_unlabeled_mean.cpu().numpy(),
     )
     assert q2.obs_metadata_.shape[0] >= 3
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU")
+def test_train_on_gpu(gadata):
+    """Prototype initialization after pretraining runs its own data loader while the module is
+    in train mode (no auto_move_data): the batches must be moved to the GPU (regression)."""
+    ref, qry = split(gadata)
+    gpu = dict(enable_progress_bar=False, accelerator="gpu")
+    m = fit(ref, **gpu)
+    q = SCPOLI.load_query_data(qry, m, labeled_indices=[], accelerator="gpu")
+    q.train(n_epochs=4, pretraining_epochs=2, **gpu)
+    assert np.isfinite(q.history["train_loss"].values.astype(float)).all()
+    assert q.get_latent(qry, mean=True).shape == (qry.n_obs, 8)
 
 
 def test_add_new_cell_type_and_prototype_info(gadata):

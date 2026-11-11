@@ -234,6 +234,12 @@ class SCPoliTrainingPlan(TrainingPlan):
         )
         out = []
         for tensors in loader:
+            # Called mid-training (module in train mode), where scvi-tools' auto_move_data
+            # does not move inputs: put the batch on the training device explicitly.
+            tensors = {
+                k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+                for k, v in tensors.items()
+            }
             inf = self.module.inference(
                 **self.module._get_inference_input(tensors)
             )
