@@ -55,6 +55,12 @@ can use. Install the PyTorch wheel that matches your CUDA version first (see
 `model.train(accelerator="gpu")`, `accelerator="mps"` (Apple silicon) or `accelerator="cpu"`.
 The default, `"auto"`, picks CUDA if it is available. scvi-tools does not pick MPS automatically.
 
+Store sparse counts as CSR before training (`adata.X = scipy.sparse.csr_matrix(adata.X)`).
+Minibatches are rows of cells, and slicing rows of a CSC matrix is about 30 times slower; the GPU
+then mostly waits for data. Query training on 104k cells × 3,000 genes (batch size 1024, RTX
+2080 Ti) took 17.0 s per epoch with CSC and 2.7 s with CSR; on 5 CPU threads, it took 23.9 s
+per epoch with CSR. scvi-tools warns about CSC data when it is registered.
+
 Training runs on one device. As in scvi-tools, multi-GPU (DDP) training is not a default
 feature, and scpolivi does not support it: the prototype updates at the end of each epoch run
 on a single device.

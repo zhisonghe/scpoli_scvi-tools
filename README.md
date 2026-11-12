@@ -57,6 +57,10 @@ install the PyTorch build for your CUDA version first. Choose the device with
 `train(accelerator="gpu" | "mps" | "cpu")`. Training runs on one device; multi-GPU (DDP) is
 opt-in in scvi-tools and not supported here.
 
+Store sparse counts as CSR (`adata.X = scipy.sparse.csr_matrix(adata.X)`). Minibatches are rows
+of cells, and slicing rows of a CSC matrix is much slower: on 104k cells, a GPU epoch took 17 s
+with CSC and 2.7 s with CSR. scvi-tools warns about this when the data is registered.
+
 ## Quick start
 
 ```python
