@@ -1027,6 +1027,11 @@ class SCPOLI(ArchesMixin, RNASeqMixin, VAEMixin, BaseMinifiedModeModelClass):
             )
         finally:
             _QUERY_OVERRIDES.reset(token)
+        # scvi-tools moves only resized reference tensors to the query device, and its
+        # Embedding._load_from_state_dict adopts the loaded tensor as is: embeddings of condition
+        # keys without new values would stay on the reference model's device.
+        _, _, dev = parse_device_args(accelerator, device, return_device="torch", validate_single_device=True)
+        model.to_device(dev)
 
         m = model.module
         fixed = torch.zeros(m.n_cell_types, dtype=torch.bool, device=m.prototypes_fixed.device)

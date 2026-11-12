@@ -116,6 +116,19 @@ def test_save_load_query_roundtrip(gadata, tmp_path):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU")
+def test_query_from_cpu_reference_on_gpu(gadata):
+    """A CPU reference mapped on the GPU: every tensor of the query model must be on the GPU,
+    including the embedding of a condition key without new values (regression)."""
+    ref, qry = split(gadata)
+    m = fit(ref, accelerator="cpu")
+    m.module.cpu()
+    q = SCPOLI.load_query_data(qry, m, labeled_indices=[], accelerator="gpu")
+    tensors = dict(q.module.named_parameters()) | dict(q.module.named_buffers())
+    assert {n for n, t in tensors.items() if t.device.type != "cuda"} == set()
+    q.train(n_epochs=2, pretraining_epochs=1, enable_progress_bar=False, accelerator="gpu")
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU")
 def test_train_on_gpu(gadata):
     """Prototype initialization after pretraining runs its own data loader while the module is
     in train mode (no auto_move_data): the batches must be moved to the GPU (regression)."""
