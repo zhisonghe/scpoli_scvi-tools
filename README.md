@@ -49,7 +49,7 @@ installed automatically.
 ```bash
 git clone https://github.com/zhisonghe/scpoli_scvi-tools.git && cd scpoli_scvi-tools
 pip install ".[leiden]"          # extra: scanpy + Leiden, for the default prototype init and graph building
-pip install -e ".[test]" && pytest   # development
+pip install -e ".[test]" && pytest   # development (SCPOLIVI_TEST_ACCELERATOR=gpu pytest: on a GPU)
 ```
 
 Without the `leiden` extra, train with `clustering="kmeans", n_clusters=...`. For GPUs,

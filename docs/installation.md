@@ -41,6 +41,12 @@ pip install -e ".[test]"
 pytest
 ```
 
+The tests train on the CPU by default. To run them on a GPU:
+
+```bash
+SCPOLIVI_TEST_ACCELERATOR=gpu pytest
+```
+
 ## GPU and Apple silicon
 
 scpolivi trains with Lightning through scvi-tools, so the PyTorch build decides which hardware it

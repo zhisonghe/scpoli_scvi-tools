@@ -11,13 +11,15 @@ import torch
 from scpolivi import SCPOLI
 from scpolivi.module import _prototypes as P
 
+from conftest import ACCELERATOR
+
 warnings.filterwarnings("ignore")
 
 
 def _load(golden_dir, which):
     d = golden_dir / f"trained_{which}"
     adata = ad.read_h5ad(d / f"adata_{which}.h5ad")
-    model = SCPOLI.from_scarches(str(d), adata, accelerator="cpu")
+    model = SCPOLI.from_scarches(str(d), adata, accelerator=ACCELERATOR)
     return d, adata, model, dict(np.load(d / "outputs.npz", allow_pickle=True))
 
 
@@ -56,7 +58,7 @@ def test_query_import_matches_scarches(golden_dir):
     assert "NK" in model.cell_types_
     np.testing.assert_allclose(model.get_latent(adata, mean=True), gold["latent_mean"], atol=1e-4)
     ref = ad.read_h5ad(golden_dir / "trained_ref" / "adata_ref.h5ad")
-    ref_model = SCPOLI.from_scarches(str(d), ref, accelerator="cpu")
+    ref_model = SCPOLI.from_scarches(str(d), ref, accelerator=ACCELERATOR)
     np.testing.assert_allclose(ref_model.get_latent(ref, mean=True), gold["ref_latent_mean"], atol=1e-4)
 
 
@@ -67,7 +69,7 @@ def test_surgery_from_imported_reference(golden_dir):
     nk = np.where(qry.obs.ct_fine == "NK")[0][:20]
     q, new = SCPOLI.load_query_data(qry, ref_model, labeled_indices=nk, return_new_conditions=True)
     assert new == {"study": ["s3"], "tech": []}
-    q.train(n_epochs=4, pretraining_epochs=2, eta=10, enable_progress_bar=False, accelerator="cpu")
+    q.train(n_epochs=4, pretraining_epochs=2, eta=10, enable_progress_bar=False, accelerator=ACCELERATOR)
     assert "NK" in q.cell_types_
     # surgery only trains embeddings and dispersion: network weights and the embeddings of
     # reference-only conditions are unchanged (shared conditions, here "tech", may move)

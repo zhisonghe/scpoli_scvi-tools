@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import anndata as ad
@@ -6,6 +7,26 @@ import pandas as pd
 import pytest
 
 GOLDEN = Path(__file__).parent / "golden" / "synthetic"
+
+#: Lightning accelerator the tests train and load models on. Set
+#: ``SCPOLIVI_TEST_ACCELERATOR=gpu`` to run the suite on a GPU (default: ``cpu``).
+ACCELERATOR = os.environ.get("SCPOLIVI_TEST_ACCELERATOR", "cpu").lower()
+
+
+def pytest_configure(config):
+    if ACCELERATOR not in ("cpu", "gpu"):
+        raise pytest.UsageError(
+            f"SCPOLIVI_TEST_ACCELERATOR must be 'cpu' or 'gpu', not {ACCELERATOR!r}."
+        )
+    if ACCELERATOR == "gpu":
+        import torch
+
+        if not torch.cuda.is_available():
+            raise pytest.UsageError("SCPOLIVI_TEST_ACCELERATOR=gpu, but no CUDA GPU is available.")
+
+
+def pytest_report_header(config):
+    return f"scpolivi test accelerator: {ACCELERATOR} (SCPOLIVI_TEST_ACCELERATOR)"
 
 
 def make_adata(seed: int = 0, n_cells: int = 300, n_genes: int = 50) -> ad.AnnData:

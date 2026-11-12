@@ -17,10 +17,10 @@ from scpolivi.graph import (
     inbatch_laplacian_loss,
 )
 
-from conftest import make_adata
+from conftest import ACCELERATOR, make_adata
 
 warnings.filterwarnings("ignore")
-FAST = dict(enable_progress_bar=False, accelerator="cpu")
+FAST = dict(enable_progress_bar=False, accelerator=ACCELERATOR)
 SCANCVI_MODULE = Path(__file__).parents[1] / "external" / "scancvi" / "src" / "scancvi" / "_module.py"
 
 

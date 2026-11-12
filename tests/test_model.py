@@ -9,8 +9,10 @@ import torch
 from scpolivi import SCPOLI
 from scpolivi.train import SCPoliEarlyStopping
 
+from conftest import ACCELERATOR
+
 warnings.filterwarnings("ignore")
-FAST = dict(enable_progress_bar=False, accelerator="cpu")
+FAST = dict(enable_progress_bar=False, accelerator=ACCELERATOR)
 
 
 @pytest.fixture
